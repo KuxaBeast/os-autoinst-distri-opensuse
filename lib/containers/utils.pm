@@ -160,18 +160,22 @@ sub reset_container_network_if_needed {
     my ($version, $sp, $host_distri) = get_os_release;
     my $sp_version = "$version.$sp";
 
-    # This workaround is only needed from SLE 15-SP3 (and Leap 15.3) onwards.
-    # See https://bugzilla.suse.com/show_bug.cgi?id=1213811
-    if ($version eq "15" && $sp >= 3) {
+    # This workaround is only needed from SLE 15-SP3 (and Leap 15.3) onwards. The 15.6 and newer should be fixed.
+    if ($version eq "15" && $sp >= 3 && $sp < 6) {
         my $runtime = get_required_var('CONTAINER_RUNTIMES');
         if ($host_distri =~ /sles|opensuse/ && $runtime =~ /docker/) {
             if ($current_engine eq 'podman') {
                 # Only stop docker, if docker is active. This is also a free check if docker is present
+                # See https://bugzilla.suse.com/show_bug.cgi?id=1213811
                 systemctl("stop docker") if (script_run("systemctl is-active docker") == 0);
             } elsif ($current_engine eq 'docker') {
                 systemctl("start docker");
             }
             systemctl("restart firewalld") if (script_run("systemctl is-active firewalld") == 0);
+
+            # Check if network works after firewall is restarted
+            # see https://bugzilla.suse.com/show_bug.cgi?id=1214080
+            assert_script_run("$current_engine run registry.opensuse.org/opensuse/tumbleweed:latest ping -c3 8.8.8.8");
         }
     }
 }
