@@ -28,6 +28,7 @@ UserNS=keep-id
 RunInit=yes
 DropCapability=all
 NoNewPrivileges=true
+PodmanArgs=--security-opt=seccomp=unconfined
 
 # change homedir to match user console serial terminal regexes
 Environment=HOME=/home
@@ -180,6 +181,7 @@ sub post_run_hook {
 
 sub post_fail_hook {
     select_serial_terminal;
+    script_run("ausearch -ts boot -m avc");
     cleanup();
 }
 
