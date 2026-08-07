@@ -22,12 +22,46 @@ use Mojo::Util 'trim';
 
 our @EXPORT = qw(runtime_smoke_tests get_vars
   check_min_runtime_version container_ip container_route registry_url reset_container_network_if_needed
+  is_newer_image_build
 );
 
 sub check_min_runtime_version {
     my ($desired_version) = @_;
     my $podman_version = script_output "podman version | awk '/^Version:/ { print \$2 }'";
     return version->parse($podman_version) >= version->parse($desired_version);
+}
+
+=head2 is_newer_image_build
+
+Compare the release embedded in a container image's C<org.opensuse.reference>
+label (last C<->-separated token of the tag, e.g. C<15.7-60.36> -> C<60.36>)
+against the C<buildrelease> that was requested for this test run (e.g.
+C<60.35>, see C<CONTAINER_IMAGE_BUILD>).
+
+Returns 1 if the registry reference is strictly newer than the requested
+build release (i.e. a newer image build was published to the registry while
+this job was queued or running, see poo#205197), 0 otherwise -- including
+when either value doesn't look like a dotted-numeric release, in which case
+callers should treat it as an ordinary mismatch instead of an obsolete run.
+
+=cut
+
+sub is_newer_image_build {
+    my ($reference, $buildrelease) = @_;
+    return 0 unless (defined $reference && defined $buildrelease);
+
+    my ($registry_release) = $reference =~ /-([0-9]+(?:\.[0-9]+)*)$/;
+    return 0 unless (defined $registry_release && $buildrelease =~ /^[0-9]+(?:\.[0-9]+)*$/);
+
+    my @registry_parts = split(/\./, $registry_release);
+    my @requested_parts = split(/\./, $buildrelease);
+    for my $i (0 .. (($#registry_parts > $#requested_parts) ? $#registry_parts : $#requested_parts)) {
+        my $registry_num = $registry_parts[$i] // 0;
+        my $requested_num = $requested_parts[$i] // 0;
+        return 1 if $registry_num > $requested_num;
+        return 0 if $registry_num < $requested_num;
+    }
+    return 0;
 }
 
 

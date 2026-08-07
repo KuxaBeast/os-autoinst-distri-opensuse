@@ -15,6 +15,7 @@ use Mojo::Base 'consoletest';
 use utils qw(zypper_call script_retry);
 use version_utils;
 use containers::common;
+use containers::utils qw(is_newer_image_build);
 use testapi;
 use serial_terminal 'select_serial_terminal';
 
@@ -55,7 +56,19 @@ sub run {
         my $reference = script_output(qq($engine inspect --type image $image | jq -r '.[0].Config.Labels."org.opensuse.reference"'));
         # Note: Both lines are aligned, thus the additional space
         record_info('builds', "CONTAINER_IMAGE_BUILD:  $build\norg.opensuse.reference: $reference");
-        die('Missmatch in image build number. The image build number is different than the one triggered by the container bot!') if ($reference !~ /$buildrelease$/);
+        if ($reference !~ /$buildrelease$/) {
+            # A newer image build was published to the registry while this job was queued/running on a
+            # slow architecture. Every affected run has (or will have) a green successor testing the newer
+            # build, so this run is simply obsolete -- soft-fail and abort instead of failing the job. See
+            # poo#205197.
+            if (is_newer_image_build($reference, $buildrelease)) {
+                record_soft_failure("poo#205197 - Obsolete test run: a newer image build was published to the registry "
+                      . "while this job was queued/running ($build -> $reference). See the successor build for coverage of this image.");
+                set_var('BCI_IMAGE_OBSOLETE', 1);
+            } else {
+                die('Mismatch in image build number. The image build number is different than the one triggered by the container bot!');
+            }
+        }
     }
 }
 

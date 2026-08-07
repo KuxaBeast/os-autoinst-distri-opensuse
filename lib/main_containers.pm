@@ -360,7 +360,11 @@ sub load_container_tests {
         if (get_var('BCI_TESTS')) {
             loadtest 'containers/bci_collect_stats' if (get_var('IMAGE_STORE_DATA'));
             # Note: bci_version_check requires jq.
-            loadtest 'containers/bci_version_check' if (get_var('CONTAINER_IMAGE_TO_TEST') && get_var('CONTAINER_IMAGE_BUILD'));
+            if (get_var('CONTAINER_IMAGE_TO_TEST') && get_var('CONTAINER_IMAGE_BUILD')) {
+                loadtest 'containers/bci_version_check';
+                # Aborts (without failing the job) if bci_version_check found this run obsolete. See poo#205197.
+                loadtest 'containers/bci_obsolete_abort';
+            }
             loadtest('containers/bci_reproducible_build') if get_var('CONTAINER_REPRODUCIBLE_IMAGE_TO_TEST');
         }
     } elsif (is_tumbleweed && get_var('FLAVOR', '') =~ /dvd|net/i) {
